@@ -45,27 +45,30 @@ class StockAPI:
 
         @self.app.post("/crawl")
         def crawl_stocks(request: CrawlRequest, background_tasks: BackgroundTasks):
-            """Trigger crawling of stock data"""
+            """Trigger crawling of stock data - Manual crawls bypass rate limiting"""
             def run_crawling():
+                # Manual crawls bypass rate limiting
+                bypass_rate_limit = True
+                
                 if request.sites:
                     # Crawl specific sites
                     results = {}
                     for site in request.sites:
                         if site == 'tonghuashun':
-                            results[site] = self.crawler.crawl_tonghuashun()
+                            results[site] = self.crawler.crawl_tonghuashun(bypass_rate_limit)
                         elif site == 'dongfangcaifu':
-                            results[site] = self.crawler.crawl_dongfangcaifu()
+                            results[site] = self.crawler.crawl_dongfangcaifu(bypass_rate_limit)
                         elif site == 'xueqiu':
-                            results[site] = self.crawler.crawl_xueqiu()
+                            results[site] = self.crawler.crawl_xueqiu(bypass_rate_limit)
                         elif site == 'tongdaxin':
-                            results[site] = self.crawler.crawl_tongdaxin()
+                            results[site] = self.crawler.crawl_tongdaxin(bypass_rate_limit)
                         elif site == 'caijinglian':
-                            results[site] = self.crawler.crawl_caijinglian()
+                            results[site] = self.crawler.crawl_caijinglian(bypass_rate_limit)
                         else:
                             results[site] = {"error": f"Unknown site: {site}"}
                 else:
                     # Crawl all sites
-                    results = self.crawler.crawl_all_sites()
+                    results = self.crawler.crawl_all_sites(bypass_rate_limit)
                 
                 # Save data to files
                 filepath = self.crawler.save_data(results, request.category)
@@ -142,13 +145,20 @@ class StockAPI:
                 }
             return status
 
+        @self.app.post("/reset_rate_limits")
+        def reset_rate_limits():
+            """Reset rate limits for all crawlers (for testing)"""
+            self.crawler.last_crawl_times = {}
+            return {"message": "Rate limits reset successfully"}
+
     def _schedule_crawling(self):
-        """Schedule periodic crawling every 20 minutes"""
+        """Schedule periodic crawling every 30 minutes"""
         def run_periodic_crawling():
             while True:
-                time.sleep(20 * 60)  # 20 minutes
+                time.sleep(30 * 60)  # 30 minutes
                 print("Running scheduled crawl...")
-                results = self.crawler.crawl_all_sites()
+                # Scheduled crawls respect rate limiting
+                results = self.crawler.crawl_all_sites(bypass_rate_limit=False)
                 
                 # Save data to files
                 filepath = self.crawler.save_data(results, "scheduled")

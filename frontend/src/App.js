@@ -148,11 +148,10 @@ function App() {
 
           if (Array.isArray(stocksArray)) {
             stocksArray.forEach(stock => {
-              if (stock && stock.symbol &&
+              // More lenient filtering - only exclude obviously invalid entries
+              if (stock && stock.symbol && 
+                  stock.symbol !== 'stock symbol' && 
                   stock.symbol !== '未提供公司名称' &&
-                  stock.symbol !== 'AAPL' &&
-                  stock.symbol !== 'GOOGL' &&
-                  stock.symbol !== 'stock symbol' &&
                   stock.name !== 'company name') {
                 stocks.push({
                   symbol: stock.symbol,
@@ -193,13 +192,13 @@ function App() {
       // Prepare data for bar chart (top indices by price)
       const priceData = validStocks
         .map(stock => ({
-          name: stock.name && stock.name.length > 10 ? stock.name.substring(0, 10) + '...' : (stock.name || 'N/A'),
+          name: stock.name && stock.name.length > 15 ? stock.name.substring(0, 15) + '...' : (stock.name || 'N/A'),
           price: parseFloat(stock.price),
           symbol: stock.symbol
         }))
         .filter(item => !isNaN(item.price))
         .sort((a, b) => b.price - a.price)
-        .slice(0, 10);
+        .slice(0, 20);  // Increased from 10 to 20
 
       // Prepare data for change percentage chart
       const changeData = validStocks
@@ -207,14 +206,14 @@ function App() {
         .map(stock => {
           const changePercent = parseFloat(String(stock.change_percent).replace('%', ''));
           return {
-            name: stock.name && stock.name.length > 10 ? stock.name.substring(0, 10) + '...' : (stock.name || 'N/A'),
+            name: stock.name && stock.name.length > 15 ? stock.name.substring(0, 15) + '...' : (stock.name || 'N/A'),
             change: isNaN(changePercent) ? 0 : changePercent,
             symbol: stock.symbol
           };
         })
         .filter(item => !isNaN(item.change))
         .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
-        .slice(0, 10);
+        .slice(0, 20);  // Increased from 10 to 20
 
       // Prepare pie chart data (market distribution by index type)
       const marketTypes = {};
@@ -464,7 +463,9 @@ function App() {
                                 if (record.data) {
                                   const firstSite = Object.keys(record.data)[0];
                                   if (firstSite && record.data[firstSite]?.ai_processed_data?.market_overview) {
-                                    marketOverview = record.data[firstSite].ai_processed_data.market_overview.substring(0, 100) + '...';
+                                    const overview = record.data[firstSite].ai_processed_data.market_overview;
+                                    // Show full overview, but truncate if too long for table display
+                                    marketOverview = overview.length > 150 ? overview.substring(0, 150) + '...' : overview;
                                   }
                                 }
 
@@ -960,9 +961,112 @@ function App() {
                 {/* Stock Data by Site */}
                 {selectedRecord.data && Object.keys(selectedRecord.data).map((site, siteIndex) => {
                   const siteData = selectedRecord.data[site];
-                  const stocks = siteData.ai_processed_data?.stocks || [];
-                  const marketOverview = siteData.ai_processed_data?.market_overview || 'N/A';
-                  const news = siteData.ai_processed_data?.news || [];
+                  
+                  // Debug: Log the siteData structure
+                  console.log(`[Debug] Site: ${site}, siteData:`, siteData);
+                  console.log(`[Debug] ai_processed_data:`, siteData?.ai_processed_data);
+                  
+                  // Handle null or undefined siteData
+                  if (!siteData) {
+                    return (
+                      <Grid item xs={12} key={siteIndex}>
+                        <Paper style={{ padding: '16px', backgroundColor: '#2a2a3e', border: '1px solid #ff9800' }}>
+                          <Typography variant="h6" style={{ color: '#ff9800', marginBottom: '12px' }}>
+                            {site} - 数据为空
+                          </Typography>
+                          <Typography variant="body2" style={{ color: '#ff9800' }}>
+                            该站点的数据为空或未定义
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    );
+                  }
+                  
+                  // Check for errors first
+                  if (siteData.error) {
+                    return (
+                      <Grid item xs={12} key={siteIndex}>
+                        <Paper style={{ padding: '16px', backgroundColor: '#2a2a3e', border: '1px solid #f44336' }}>
+                          <Typography variant="h6" style={{ color: '#f44336', marginBottom: '12px' }}>
+                            {site} - 错误
+                          </Typography>
+                          <Typography variant="body2" style={{ color: '#ff9800', marginBottom: '8px' }}>
+                            {siteData.error}
+                          </Typography>
+                          {siteData.raw_data_preview && (
+                            <Box mt={2}>
+                              <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
+                                原始数据预览:
+                              </Typography>
+                              <Paper style={{ padding: '12px', backgroundColor: '#1a1a2e', maxHeight: '200px', overflow: 'auto' }}>
+                                <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap' }}>
+                                  {siteData.raw_data_preview}
+                                </Typography>
+                              </Paper>
+                            </Box>
+                          )}
+                        </Paper>
+                      </Grid>
+                    );
+                  }
+                  
+                  // Handle ai_processed_data - it might be a string or object
+                  let processedData = siteData?.ai_processed_data;
+                  if (typeof processedData === 'string') {
+                    // Try to parse if it's a JSON string
+                    try {
+                      processedData = JSON.parse(processedData);
+                    } catch (e) {
+                      console.warn(`[Debug] Failed to parse ai_processed_data as JSON for ${site}:`, e);
+                      processedData = null;
+                    }
+                  }
+                  
+                  // Extract data from processedData
+                  const stocks = processedData?.stocks || [];
+                  const indices = processedData?.indices || [];
+                  const topGainers = processedData?.top_gainers || [];
+                  const topLosers = processedData?.top_losers || [];
+                  const marketOverview = processedData?.market_overview || 'N/A';
+                  const tradingSummary = processedData?.trading_summary || '';
+                  const news = processedData?.news || [];
+                  const hasError = siteData?.error || (!processedData && siteData?.raw_data_preview);
+                  
+                  // Debug: Log extracted data
+                  console.log(`[Debug] Extracted for ${site}:`, {
+                    stocks: stocks.length,
+                    indices: indices.length,
+                    topGainers: topGainers.length,
+                    topLosers: topLosers.length,
+                    hasMarketOverview: !!marketOverview,
+                    hasTradingSummary: !!tradingSummary,
+                    news: news.length,
+                    processedData: processedData
+                  });
+                  
+                  // Show message if no data found but processedData exists
+                  if (!hasError && processedData && stocks.length === 0 && indices.length === 0 && topGainers.length === 0 && 
+                      topLosers.length === 0 && marketOverview === 'N/A' && !tradingSummary && news.length === 0) {
+                    return (
+                      <Grid item xs={12} key={siteIndex}>
+                        <Paper style={{ padding: '16px', backgroundColor: '#2a2a3e', border: '1px solid #ff9800' }}>
+                          <Typography variant="h6" style={{ color: '#ff9800', marginBottom: '12px' }}>
+                            {site} - 数据结构异常
+                          </Typography>
+                          <Typography variant="body2" style={{ color: '#ff9800', marginBottom: '8px' }}>
+                            AI处理数据存在但格式不符合预期。显示原始处理数据:
+                          </Typography>
+                          <Box mt={2}>
+                            <Paper style={{ padding: '12px', backgroundColor: '#1a1a2e', maxHeight: '400px', overflow: 'auto' }}>
+                              <Typography variant="body2" style={{ fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'pre-wrap', color: '#4caf50' }}>
+                                {JSON.stringify(processedData, null, 2)}
+                              </Typography>
+                            </Paper>
+                          </Box>
+                        </Paper>
+                      </Grid>
+                    );
+                  }
 
                   return (
                     <Grid item xs={12} key={siteIndex}>
@@ -971,13 +1075,135 @@ function App() {
                           {site} 数据
                         </Typography>
 
+                        {/* Show warning if AI processing failed but raw data exists */}
+                        {hasError && (
+                          <Box mb={2} p={1} style={{ backgroundColor: '#ff9800', borderRadius: '4px' }}>
+                            <Typography variant="body2" style={{ color: '#000' }}>
+                              ⚠️ AI处理失败或未完成，显示原始数据
+                            </Typography>
+                            {siteData?.error && (
+                              <Typography variant="caption" style={{ color: '#000', display: 'block', marginTop: '4px' }}>
+                                错误: {siteData.error}
+                              </Typography>
+                            )}
+                            {siteData?.warning && (
+                              <Typography variant="caption" style={{ color: '#000', display: 'block', marginTop: '4px' }}>
+                                警告: {siteData.warning}
+                              </Typography>
+                            )}
+                          </Box>
+                        )}
+
                         {/* Market Overview */}
-                        <Box mb={2}>
-                          <Typography variant="subtitle2" color="textSecondary">市场概况</Typography>
-                          <Typography variant="body2" style={{ marginTop: '4px' }}>
-                            {marketOverview}
-                          </Typography>
-                        </Box>
+                        {marketOverview && marketOverview !== 'N/A' && (
+                          <Box mb={2}>
+                            <Typography variant="subtitle2" color="textSecondary">市场概况</Typography>
+                            <Typography variant="body2" style={{ marginTop: '4px', whiteSpace: 'pre-wrap' }}>
+                              {marketOverview}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Trading Summary */}
+                        {tradingSummary && (
+                          <Box mb={2}>
+                            <Typography variant="subtitle2" color="textSecondary">交易总结</Typography>
+                            <Typography variant="body2" style={{ marginTop: '4px', whiteSpace: 'pre-wrap' }}>
+                              {tradingSummary}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {/* Market Indices */}
+                        {indices.length > 0 && (
+                          <Box mb={2}>
+                            <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
+                              市场指数 ({indices.length})
+                            </Typography>
+                            <TableContainer>
+                              <Table size="small">
+                                <TableHead>
+                                  <TableRow style={{ backgroundColor: '#1a1a2e' }}>
+                                    <TableCell style={{ color: '#bb86fc' }}>指数名称</TableCell>
+                                    <TableCell style={{ color: '#bb86fc' }}>数值</TableCell>
+                                    <TableCell style={{ color: '#bb86fc' }}>涨跌</TableCell>
+                                    <TableCell style={{ color: '#bb86fc' }}>涨跌幅</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {indices.map((index, indexIdx) => (
+                                    <TableRow key={indexIdx}>
+                                      <TableCell>{index.name || 'N/A'}</TableCell>
+                                      <TableCell>{index.value || 'N/A'}</TableCell>
+                                      <TableCell style={{
+                                        color: index.change && String(index.change).includes('-') ? '#f44336' : '#4caf50'
+                                      }}>
+                                        {index.change || 'N/A'}
+                                      </TableCell>
+                                      <TableCell style={{
+                                        color: index.change_percent && String(index.change_percent).includes('-') ? '#f44336' : '#4caf50'
+                                      }}>
+                                        {index.change_percent || 'N/A'}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </TableContainer>
+                          </Box>
+                        )}
+
+                        {/* Top Gainers */}
+                        {topGainers.length > 0 && (
+                          <Box mb={2}>
+                            <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
+                              涨幅榜 ({topGainers.length})
+                            </Typography>
+                            <List>
+                              {topGainers.map((gainer, idx) => {
+                                // Handle both string and object formats
+                                const displayText = typeof gainer === 'string' 
+                                  ? gainer 
+                                  : (gainer.symbol || gainer.name || JSON.stringify(gainer));
+                                const gainValue = typeof gainer === 'object' ? gainer.gain || gainer.change_percent || '' : '';
+                                
+                                return (
+                                  <ListItem key={idx} style={{ paddingLeft: 0 }}>
+                                    <Typography variant="body2" style={{ color: '#4caf50' }}>
+                                      • {displayText} {gainValue && `(${gainValue})`}
+                                    </Typography>
+                                  </ListItem>
+                                );
+                              })}
+                            </List>
+                          </Box>
+                        )}
+
+                        {/* Top Losers */}
+                        {topLosers.length > 0 && (
+                          <Box mb={2}>
+                            <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
+                              跌幅榜 ({topLosers.length})
+                            </Typography>
+                            <List>
+                              {topLosers.map((loser, idx) => {
+                                // Handle both string and object formats
+                                const displayText = typeof loser === 'string' 
+                                  ? loser 
+                                  : (loser.symbol || loser.name || JSON.stringify(loser));
+                                const lossValue = typeof loser === 'object' ? loser.loss || loser.change_percent || '' : '';
+                                
+                                return (
+                                  <ListItem key={idx} style={{ paddingLeft: 0 }}>
+                                    <Typography variant="body2" style={{ color: '#f44336' }}>
+                                      • {displayText} {lossValue && `(${lossValue})`}
+                                    </Typography>
+                                  </ListItem>
+                                );
+                              })}
+                            </List>
+                          </Box>
+                        )}
 
                         {/* Stocks Table */}
                         {stocks.length > 0 && (
@@ -985,8 +1211,8 @@ function App() {
                             <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
                               股票列表 ({stocks.length})
                             </Typography>
-                            <TableContainer>
-                              <Table size="small">
+                            <TableContainer style={{ maxHeight: '600px', overflow: 'auto' }}>
+                              <Table size="small" stickyHeader>
                                 <TableHead>
                                   <TableRow style={{ backgroundColor: '#1a1a2e' }}>
                                     <TableCell style={{ color: '#bb86fc' }}>代码</TableCell>
@@ -1034,13 +1260,42 @@ function App() {
                             <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
                               相关新闻 ({news.length})
                             </Typography>
-                            <List>
-                              {news.slice(0, 5).map((newsItem, newsIndex) => (
-                                <ListItem key={newsIndex} style={{ paddingLeft: 0 }}>
-                                  <Typography variant="body2">• {newsItem}</Typography>
-                                </ListItem>
-                              ))}
-                            </List>
+                            <Box style={{ maxHeight: '300px', overflow: 'auto' }}>
+                              <List>
+                                {news.map((newsItem, newsIndex) => {
+                                  // Handle both string and object formats
+                                  const displayText = typeof newsItem === 'string' 
+                                    ? newsItem 
+                                    : (newsItem.title || newsItem.text || JSON.stringify(newsItem));
+                                  
+                                  return (
+                                    <ListItem key={newsIndex} style={{ paddingLeft: 0 }}>
+                                      <Typography variant="body2">• {displayText}</Typography>
+                                    </ListItem>
+                                  );
+                                })}
+                              </List>
+                            </Box>
+                          </Box>
+                        )}
+
+                        {/* Show raw data preview if AI processing failed */}
+                        {hasError && siteData?.raw_data_preview && (
+                          <Box mt={2}>
+                            <Typography variant="subtitle2" color="textSecondary" style={{ marginBottom: '8px' }}>
+                              原始数据预览 (前500字符):
+                            </Typography>
+                            <Paper style={{ padding: '12px', backgroundColor: '#1a1a2e', maxHeight: '300px', overflow: 'auto' }}>
+                              <Typography variant="body2" style={{ 
+                                fontFamily: 'monospace', 
+                                fontSize: '12px', 
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: 'break-word',
+                                color: '#4caf50'
+                              }}>
+                                {siteData.raw_data_preview}
+                              </Typography>
+                            </Paper>
                           </Box>
                         )}
                       </Paper>

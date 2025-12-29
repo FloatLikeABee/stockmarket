@@ -109,10 +109,19 @@ The API will be available at `http://localhost:9878`
 ```bash
 cd frontend
 npm install
-PORT=4000 npm start
+npm run start:4000
 ```
 
-The frontend will be available at `http://localhost:4000`
+**Windows users**: If you get an error, use:
+```bash
+cd frontend
+npm install
+set PORT=4000 && npm start
+```
+
+Or simply use `npm start` (defaults to port 3000).
+
+The frontend will be available at `http://localhost:4000` (or `http://localhost:3000` if using default)
 
 ## API Endpoints
 

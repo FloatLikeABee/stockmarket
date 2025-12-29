@@ -62,10 +62,24 @@ npm install
 2. Run the development server:
 ```bash
 cd frontend
-PORT=4000 npm start
+npm start
 ```
 
-The frontend will be available at `http://localhost:4000`
+Or to specify port 4000 explicitly:
+```bash
+cd frontend
+npm run start:4000
+```
+
+**Windows users**: If you get an error with `PORT=4000`, use:
+```bash
+cd frontend
+set PORT=4000 && npm start
+```
+
+Or simply use `npm start` (defaults to port 3000) or `npm run start:4000` after installing dependencies.
+
+The frontend will be available at `http://localhost:4000` (or `http://localhost:3000` if using default)
 
 ## API Endpoints
 

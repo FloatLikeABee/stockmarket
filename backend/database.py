@@ -1,9 +1,16 @@
-import redislite
 import json
 from tinydb import TinyDB, Query
 from datetime import datetime
 from typing import Dict, List, Optional
 import os
+
+# Try to import redislite, but make it optional
+try:
+    import redislite
+    REDISLITE_AVAILABLE = True
+except ImportError:
+    REDISLITE_AVAILABLE = False
+    redislite = None
 
 
 class StockDatabase:
@@ -12,14 +19,18 @@ class StockDatabase:
         self.tinydb = TinyDB(tinydb_path)
         self.query = Query()
         
-        # Initialize redislite for embedded caching
-        try:
-            self.redis_client = redislite.Redis(redis_db_path)
-            # Test Redis connection
-            self.redis_client.ping()
-        except Exception as e:
-            print(f"Warning: Could not initialize redislite. Running without caching: {e}")
-            self.redis_client = None
+        # Initialize redislite for embedded caching (optional)
+        self.redis_client = None
+        if REDISLITE_AVAILABLE:
+            try:
+                self.redis_client = redislite.Redis(redis_db_path)
+                # Test Redis connection
+                self.redis_client.ping()
+            except Exception as e:
+                print(f"Warning: Could not initialize redislite. Running without caching: {e}")
+                self.redis_client = None
+        else:
+            print("Info: redislite not available. Running without caching.")
 
     def index_crawled_file(self, filepath: str, metadata: Dict) -> bool:
         """Index a crawled file in TinyDB, avoiding duplicates and loading actual content"""

@@ -1,6 +1,6 @@
 fastapi==0.104.1
 uvicorn==0.24.0
-redislite==6.2.912183
+# redislite==6.2.912183  # Optional: requires C compilation on Windows. App works without it.
 tinydb==4.8.0
 requests==2.31.0
 beautifulsoup4==4.12.2
@@ -10,5 +10,6 @@ pydantic==2.5.0
 aiofiles==23.2.1
 python-dateutil==2.8.2
 apscheduler==3.10.4
-asyncio==3.4.3
+# asyncio is part of Python standard library, no need to install
 fake-useragent==1.4.0
+openai>=1.0.0
