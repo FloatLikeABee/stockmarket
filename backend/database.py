@@ -46,54 +46,46 @@ class StockDatabase:
             # Check if a record with the same filepath already exists
             existing_records = self.tinydb.search(self.query.filepath == filepath)
 
+            # Create the record data
+            record = {
+                "filepath": filepath,
+                "timestamp": metadata.get("timestamp", datetime.now().isoformat()),
+                "metadata": metadata,
+                "indexed_at": datetime.now().isoformat(),
+                "data": file_data  # Include actual file content
+            }
+
             if existing_records:
                 # Update the existing record instead of inserting a new one
-                record = {
-                    "filepath": filepath,
-                    "timestamp": datetime.now().isoformat(),
-                    "metadata": metadata,
-                    "indexed_at": datetime.now().isoformat(),
-                    "data": file_data  # Include actual file content
-                }
+                # Use the document ID from the first existing record
+                doc_id = existing_records[0].doc_id
 
-                # Update the first matching record
-                self.tinydb.update(record, self.query.filepath == filepath)
+                # Update using the document ID to avoid conflicts
+                self.tinydb.update(record, doc_ids=[doc_id])
 
-                # Update cache if available
-                if self.redis_client:
-                    cache_key = f"file:{os.path.basename(filepath)}"
-                    self.redis_client.setex(
-                        cache_key,
-                        3600,  # 1 hour cache
-                        json.dumps(record)
-                    )
-
-                return True
+                print(f"Updated existing record (ID: {doc_id}) for {filepath}")
             else:
-                # Insert new record
-                record = {
-                    "filepath": filepath,
-                    "timestamp": datetime.now().isoformat(),
-                    "metadata": metadata,
-                    "indexed_at": datetime.now().isoformat(),
-                    "data": file_data  # Include actual file content
-                }
+                # Insert new record - let TinyDB assign the next available ID
+                doc_id = self.tinydb.insert(record)
+                print(f"Inserted new record (ID: {doc_id}) for {filepath}")
 
-                # Insert into TinyDB
-                self.tinydb.insert(record)
-
-                # Cache in redislite if available
-                if self.redis_client:
+            # Update cache if available
+            if self.redis_client:
+                try:
                     cache_key = f"file:{os.path.basename(filepath)}"
                     self.redis_client.setex(
                         cache_key,
                         3600,  # 1 hour cache
                         json.dumps(record)
                     )
+                except Exception as cache_error:
+                    print(f"Warning: Could not update cache: {cache_error}")
 
-                return True
+            return True
         except Exception as e:
-            print(f"Error indexing file: {e}")
+            print(f"Error indexing file {filepath}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def search_by_date_range(self, start_date: str, end_date: str) -> List[Dict]:
@@ -142,14 +134,48 @@ class StockDatabase:
         """Get database statistics"""
         total_records = len(self.tinydb)
         all_records = self.tinydb.all()
-        
+
         site_counts = {}
         for record in all_records:
             site = record.get('metadata', {}).get('site', 'unknown')
             site_counts[site] = site_counts.get(site, 0) + 1
-        
+
         return {
             "total_records": total_records,
             "sites": site_counts,
             "latest_update": max([r['timestamp'] for r in all_records]) if all_records else None
         }
+
+    def remove_duplicates(self) -> int:
+        """Remove duplicate records based on filepath, keeping the most recent one"""
+        all_records = self.tinydb.all()
+        filepath_map = {}
+        duplicates_removed = 0
+
+        # Group records by filepath
+        for record in all_records:
+            filepath = record.get('filepath')
+            if not filepath:
+                continue
+
+            if filepath not in filepath_map:
+                filepath_map[filepath] = []
+            filepath_map[filepath].append(record)
+
+        # For each filepath with duplicates, keep only the most recent
+        for filepath, records in filepath_map.items():
+            if len(records) > 1:
+                # Sort by indexed_at timestamp, most recent first
+                sorted_records = sorted(
+                    records,
+                    key=lambda x: x.get('indexed_at', ''),
+                    reverse=True
+                )
+
+                # Keep the first (most recent), remove the rest
+                for record in sorted_records[1:]:
+                    self.tinydb.remove(doc_ids=[record.doc_id])
+                    duplicates_removed += 1
+                    print(f"Removed duplicate record (ID: {record.doc_id}) for {filepath}")
+
+        return duplicates_removed

@@ -136,23 +136,56 @@ function App() {
   // Extract stock symbols and data from a record
   const extractStockData = (record) => {
     const stocks = [];
-    if (record && record.data) {
-      Object.keys(record.data).forEach(site => {
-        const siteData = record.data[site];
-        if (siteData && siteData.ai_processed_data) {
-          // Handle both object and array formats
-          const processedData = siteData.ai_processed_data;
-          const stocksArray = typeof processedData === 'string'
-            ? []
-            : (processedData.stocks || []);
 
-          if (Array.isArray(stocksArray)) {
-            stocksArray.forEach(stock => {
-              // More lenient filtering - only exclude obviously invalid entries
-              if (stock && stock.symbol && 
-                  stock.symbol !== 'stock symbol' && 
+    try {
+      if (!record || !record.data) {
+        return stocks;
+      }
+
+      Object.keys(record.data).forEach(site => {
+        try {
+          const siteData = record.data[site];
+
+          // Skip if siteData is null, undefined, or not an object
+          if (!siteData || typeof siteData !== 'object') {
+            return;
+          }
+
+          // Check if ai_processed_data exists and is not null
+          if (!siteData.ai_processed_data) {
+            return;
+          }
+
+          const processedData = siteData.ai_processed_data;
+
+          // Skip if processedData is a string or null
+          if (typeof processedData === 'string' || processedData === null) {
+            return;
+          }
+
+          // Get stocks array, handle different formats
+          let stocksArray = [];
+          if (Array.isArray(processedData)) {
+            stocksArray = processedData;
+          } else if (processedData.stocks && Array.isArray(processedData.stocks)) {
+            stocksArray = processedData.stocks;
+          }
+
+          // Process each stock
+          stocksArray.forEach(stock => {
+            try {
+              if (!stock || typeof stock !== 'object') {
+                return;
+              }
+
+              // Validate stock has required fields and is not placeholder data
+              if (stock.symbol &&
                   stock.symbol !== '未提供公司名称' &&
-                  stock.name !== 'company name') {
+                  stock.symbol !== 'AAPL' &&
+                  stock.symbol !== 'GOOGL' &&
+                  stock.symbol !== 'stock symbol' &&
+                  stock.name !== 'company name' &&
+                  stock.name !== 'N/A') {
                 stocks.push({
                   symbol: stock.symbol,
                   name: stock.name || 'N/A',
@@ -163,11 +196,20 @@ function App() {
                   site: site
                 });
               }
-            });
-          }
+            } catch (stockError) {
+              // Skip individual stock errors
+              console.warn(`Error processing stock:`, stockError);
+            }
+          });
+        } catch (siteError) {
+          // Skip individual site errors
+          console.warn(`Error processing site ${site}:`, siteError);
         }
       });
+    } catch (error) {
+      console.error('Error in extractStockData:', error);
     }
+
     return stocks;
   };
 
@@ -838,6 +880,9 @@ function App() {
                               const timestamp = record.timestamp || 'N/A';
                               const filepath = record.filepath || 'N/A';
 
+                              // Extract just the filename from the path
+                              const filename = filepath.split('/').pop() || filepath;
+
                               return (
                                 <Paper
                                   key={index}
@@ -859,34 +904,52 @@ function App() {
                                   }}
                                   onClick={() => handleOpenJsonModal(record)}
                                 >
-                                  <Grid container spacing={2}>
-                                    <Grid item xs={12} md={6}>
+                                  <Grid container spacing={2} alignItems="center">
+                                    <Grid item xs={12} md={5}>
                                       <Typography variant="body2" color="textSecondary">
-                                        文件路径:
+                                        文件名:
                                       </Typography>
-                                      <Typography variant="body1" style={{ color: '#4caf50', fontFamily: 'monospace' }}>
-                                        {filepath}
+                                      <Typography
+                                        variant="body1"
+                                        style={{
+                                          color: '#4caf50',
+                                          fontFamily: 'monospace',
+                                          fontSize: '0.9rem',
+                                          wordBreak: 'break-word'
+                                        }}
+                                      >
+                                        {filename}
                                       </Typography>
                                     </Grid>
-                                    <Grid item xs={12} md={3}>
+                                    <Grid item xs={12} md={4}>
                                       <Typography variant="body2" color="textSecondary">
-                                        网站:
+                                        数据源:
                                       </Typography>
-                                      <Typography variant="body1">
-                                        {sites.join(', ')}
+                                      <Typography variant="body1" style={{ fontSize: '0.9rem' }}>
+                                        {sites.slice(0, 3).join(', ')}
+                                        {sites.length > 3 && ` +${sites.length - 3}`}
                                       </Typography>
                                     </Grid>
                                     <Grid item xs={12} md={3}>
                                       <Typography variant="body2" color="textSecondary">
                                         类别:
                                       </Typography>
-                                      <Typography variant="body1">
-                                        {category}
-                                      </Typography>
+                                      <Chip
+                                        label={category}
+                                        size="small"
+                                        color={category === 'manual' ? 'secondary' : 'primary'}
+                                        style={{ marginTop: '4px' }}
+                                      />
                                     </Grid>
                                     <Grid item xs={12}>
                                       <Typography variant="body2" color="textSecondary">
-                                        时间: {new Date(timestamp).toLocaleString()}
+                                        📅 {new Date(timestamp).toLocaleString('zh-CN', {
+                                          year: 'numeric',
+                                          month: '2-digit',
+                                          day: '2-digit',
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        })}
                                       </Typography>
                                     </Grid>
                                   </Grid>

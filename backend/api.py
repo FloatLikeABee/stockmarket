@@ -8,6 +8,7 @@ import time
 
 from .crawler import ChineseStockCrawler
 from .database import StockDatabase
+from .cleanup_scheduler import CleanupScheduler
 
 
 class CrawlRequest(BaseModel):
@@ -19,8 +20,9 @@ class StockAPI:
     def __init__(self):
         self.crawler = ChineseStockCrawler()
         self.db = StockDatabase()
+        self.cleanup_scheduler = CleanupScheduler(days_to_keep=15, check_interval_hours=24)
         self.app = FastAPI(title="Chinese Stock Market API")
-        
+
         # Add CORS middleware to allow all origins
         self.app.add_middleware(
             CORSMiddleware,
@@ -32,11 +34,14 @@ class StockAPI:
             allow_origin_regex="https?://.*",  # Allow any HTTP/HTTPS origin
             max_age=3600,  # Cache preflight requests for 1 hour
         )
-        
+
         self._setup_routes()
-        
-        # Schedule periodic crawling (every 20 minutes)
+
+        # Schedule periodic crawling (every 1 hour)
         self._schedule_crawling()
+
+        # Start automatic cleanup scheduler (runs daily to remove files older than 15 days)
+        self.cleanup_scheduler.start()
 
     def _setup_routes(self):
         @self.app.get("/")
@@ -152,10 +157,10 @@ class StockAPI:
             return {"message": "Rate limits reset successfully"}
 
     def _schedule_crawling(self):
-        """Schedule periodic crawling every 30 minutes"""
+        """Schedule periodic crawling every 1 hour"""
         def run_periodic_crawling():
             while True:
-                time.sleep(30 * 60)  # 30 minutes
+                time.sleep(60 * 60)  # 1 hour (3600 seconds)
                 print("Running scheduled crawl...")
                 # Scheduled crawls respect rate limiting
                 results = self.crawler.crawl_all_sites(bypass_rate_limit=False)
