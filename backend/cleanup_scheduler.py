@@ -11,7 +11,7 @@ from datetime import timedelta
 class CleanupScheduler:
     """Schedules automatic cleanup of old data files"""
     
-    def __init__(self, days_to_keep: int = 15, check_interval_hours: int = 24):
+    def __init__(self, days_to_keep: int = 1, check_interval_hours: int = 24):
         """
         Initialize cleanup scheduler
         

@@ -1,1 +1,1 @@
-{"pidfile": "/var/folders/zd/sykstn9j6tn099l9cyzgxk1h0000gn/T/tmp94sgo6sy/redis.pid", "unixsocket": "/var/folders/zd/sykstn9j6tn099l9cyzgxk1h0000gn/T/tmp94sgo6sy/redis.socket", "dbdir": "data", "dbfilename": "cache.db"}
+{"pidfile": "/var/folders/zd/sykstn9j6tn099l9cyzgxk1h0000gn/T/tmprbm3oqhk/redis.pid", "unixsocket": "/var/folders/zd/sykstn9j6tn099l9cyzgxk1h0000gn/T/tmprbm3oqhk/redis.socket", "dbdir": "data", "dbfilename": "cache.db"}
